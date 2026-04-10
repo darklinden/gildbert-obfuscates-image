@@ -1,6 +1,6 @@
 use clap::Parser;
 use image::{GenericImageView, ImageBuffer, Rgba};
-use std::path::PathBuf;
+use std::{path::PathBuf, time};
 
 /// Image obfuscation tool based on Gilbert curve pixel rearrangement.
 /// Losslessly shuffles pixels along a space-filling curve for encoding,
@@ -169,11 +169,44 @@ fn main() {
     );
 
     let result = process_image(&img, encrypt);
+    let mut output_path = if let Some(output_path) = cli.output {
+        output_path
+    } else {
+        cli.input
+    };
 
-    result.save(&cli.input).unwrap_or_else(|e| {
-        eprintln!("Error: failed to save '{}': {e}", cli.input.display());
+    if output_path
+        .extension()
+        .unwrap_or_else(|| "".as_ref())
+        .to_str()
+        .unwrap_or_default()
+        .to_lowercase()
+        != "png"
+    {
+        output_path = output_path.with_extension("png");
+    }
+
+    let tmp_path = output_path.with_extension(format!(
+        "tmp_{}.png",
+        time::SystemTime::now()
+            .duration_since(time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
+
+    result.save(&tmp_path).unwrap_or_else(|e| {
+        eprintln!("Error: failed to save '{}': {e}", tmp_path.display());
         std::process::exit(1);
     });
 
-    println!("Saved to '{}'", cli.input.display());
+    std::fs::rename(&tmp_path, &output_path).unwrap_or_else(|e| {
+        eprintln!(
+            "Error: failed to rename '{}' to '{}': {e}",
+            tmp_path.display(),
+            output_path.display()
+        );
+        std::process::exit(1);
+    });
+
+    println!("Saved to '{}'", output_path.display());
 }
